@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   FlatList,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import Icon from "react-native-vector-icons/MaterialIcons";
 
 // ✅ Định nghĩa kiểu dữ liệu
@@ -51,35 +52,29 @@ const VoicemailScreen = () => {
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity>
-          <Icon name="close" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Voicemail</Text>
-        <View style={styles.headerRight} />
-      </View>
+    <SafeAreaView style={styles.safearea} edges={['top']}>
+      <View style={styles.container}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Today</Text>
+          <FlatList
+            data={voicemailData.slice(0, 2)}
+            renderItem={renderVoicemailItem}
+            keyExtractor={item => item.id}
+            scrollEnabled={false}
+          />
+        </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Today</Text>
-        <FlatList
-          data={voicemailData.slice(0, 2)}
-          renderItem={renderVoicemailItem}
-          keyExtractor={(item) => item.id}
-          scrollEnabled={false}
-        />
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>July 12th, 2025</Text>
+          <FlatList
+            data={voicemailData.slice(2)}
+            renderItem={renderVoicemailItem}
+            keyExtractor={item => item.id}
+            scrollEnabled={false}
+          />
+        </View>
       </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>July 12th, 2025</Text>
-        <FlatList
-          data={voicemailData.slice(2)}
-          renderItem={renderVoicemailItem}
-          keyExtractor={(item) => item.id}
-          scrollEnabled={false}
-        />
-      </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -91,14 +86,14 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
   },
-  headerTitle: {
+  headerTitle: {    
     fontSize: 18,
     fontWeight: "600",
     color: "#333",
@@ -159,6 +154,10 @@ const styles = StyleSheet.create({
   expandButton: {
     padding: 8,
   },
+  safearea: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  }
 });
 
 export default VoicemailScreen;

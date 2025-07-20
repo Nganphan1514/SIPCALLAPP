@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,20 @@ import {
   FlatList,
   StyleSheet,
   TouchableOpacity,
-} from "react-native";
-import Icon from "react-native-vector-icons/MaterialIcons";
+  StatusBar,
+  Platform,
+  RefreshControl,
+} from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialIcons';
 import {
   getCallHistory,
   CallHistory,
-} from "../android/src/services/FireStoreService";
-import { useFocusEffect } from "@react-navigation/native";
+  getContactByPhoneNumber,
+  saveCallHistory
+} from '../android/src/services/FireStoreService';
+import { useFocusEffect } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 
 type Call = CallHistory & {
   name: string;
@@ -21,211 +28,460 @@ type Call = CallHistory & {
 };
 
 const CallsScreen = () => {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<"all" | "missed">("all");
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'missed'>('all');
   const [calls, setCalls] = useState<Call[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const nav = useNavigation<any>();
+
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      '#FF6B6B',
+      '#4ECDC4',
+      '#45B7D1',
+      '#96CEB4',
+      '#FECA57',
+      '#FF9FF3',
+      '#54A0FF',
+    ];
+    const index = name.charCodeAt(0) % colors.length;
+    return colors[index];
+  };
+
+  const loadCallHistory = async () => {
+    setIsLoading(true);
+    try {
+      const data = await getCallHistory();
+      const mapped = data.map(item => ({
+        ...item,
+        name: item.name || item.phone,
+        avatar: getAvatarColor(item.phone),
+        time: new Date(item.calledAt).toLocaleString('vi-VN', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      }));
+      setCalls(mapped);
+    } catch (error) {
+      console.error('Lỗi khi tải lịch sử cuộc gọi:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Tự động reload mỗi khi màn hình được focus
   useFocusEffect(
     useCallback(() => {
-      const fetchData = async () => {
-        const data = await getCallHistory();
-        const mapped = data.map((item) => ({
-          ...item,
-          name: item.phone,
-          avatar: item.phone[0] || "U",
-          time: new Date(item.calledAt).toLocaleString(),
-        }));
-        setCalls(mapped);
-      };
-      fetchData();
-    }, [])
+      loadCallHistory();
+    }, []),
   );
 
-  const getCallIcon = (type: Call["type"]) => {
+  const getCallIcon = (type: Call['type']) => {
     switch (type) {
-      case "incoming":
-        return <Icon name="call-received" size={16} color="#4CAF50" />;
-      case "outgoing":
-        return <Icon name="call-made" size={16} color="#2196F3" />;
-      case "missed":
-        return <Icon name="call-missed" size={16} color="#F44336" />;
+      case 'incoming':
+        return { name: 'call-received', color: '#4CAF50' };
+      case 'outgoing':
+        return { name: 'call-made', color: '#2196F3' };
+      case 'missed':
+        return { name: 'call-missed', color: '#F44336' };
       default:
-        return <Icon name="call" size={16} color="#666" />;
+        return { name: 'call', color: '#666' };
     }
   };
 
-  const filteredData = calls.filter((item) => {
+  const getCallTypeText = (type: Call['type']) => {
+    switch (type) {
+      case 'incoming':
+        return 'Gọi đến';
+      case 'outgoing':
+        return 'Gọi đi';
+      case 'missed':
+        return 'Gọi nhỡ';
+      default:
+        return 'Cuộc gọi';
+    }
+  };
+
+  const filteredData = calls.filter(item => {
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.phone.includes(searchQuery);
-    const matchesFilter = activeFilter === "all" || item.type === "missed";
+    const matchesFilter = activeFilter === 'all' || item.type === 'missed';
     return matchesSearch && matchesFilter;
   });
 
-  const renderCallItem = ({ item }: { item: Call }) => (
-    <TouchableOpacity style={styles.callItem}>
-      <View style={styles.avatarContainer}>
-        <Text style={styles.avatarText}>{item.avatar}</Text>
-      </View>
-      <View style={styles.callInfo}>
-        <Text style={styles.callName}>{item.name}</Text>
-        <View style={styles.callDetails}>
-          {getCallIcon(item.type)}
-          <Text style={styles.callTime}>{item.time}</Text>
+  const missedCallsCount = calls.filter(call => call.type === 'missed').length;
+
+  const handleRecall = (item: Call) => {
+    const phoneNumber = item.phone;
+      if (phoneNumber.trim()) {
+        getContactByPhoneNumber(phoneNumber).then(contact => {
+          if (contact) {
+            console.log('Contact found:', contact);
+            saveCallHistory(phoneNumber, contact.name, 'outgoing');
+            nav.navigate('Call', {
+              contactName: contact.name,
+              phoneNumber: phoneNumber,
+              isConnected: true,
+              callStatus: 'Đang gọi...',
+            });
+          } else {
+            console.log('No contact found for:', phoneNumber);
+            saveCallHistory(phoneNumber, '', 'outgoing');
+            nav.navigate('Call', {
+              contactName: 'Không xác định',
+              phoneNumber: phoneNumber,
+              isConnected: false,
+              callStatus: 'Đang gọi...',
+            });
+          }
+        });
+      }
+  }
+
+  const renderCallItem = ({ item }: { item: Call }) => {
+    const iconInfo = getCallIcon(item.type);
+
+    return (
+      <TouchableOpacity style={styles.callItem} activeOpacity={0.7}>
+        <View
+          style={[
+            styles.avatarContainer,
+            { backgroundColor: getAvatarColor(item.name) },
+          ]}
+        >
+          <Text style={styles.avatarText}>{item.name?.[0]?.toUpperCase()}</Text>
         </View>
-      </View>
-      <TouchableOpacity style={styles.moreButton}>
-        <Icon name="more-vert" size={20} color="#666" />
+        <View style={styles.callInfo}>
+          <Text style={styles.callName}>{item.name}</Text>
+          <View style={styles.callDetails}>
+            <Icon name={iconInfo.name} size={16} color={iconInfo.color} />
+            <Text style={[styles.callType, { color: iconInfo.color }]}>
+              {getCallTypeText(item.type)}
+            </Text>
+            <Text style={styles.callTime}>• {item.time}</Text>
+          </View>
+        </View>
+        <TouchableOpacity style={styles.callButton} activeOpacity={0.7} onPress={() => handleRecall(item)}>
+          <Icon name="call" size={20} color="#4CAF50" />
+        </TouchableOpacity>
       </TouchableOpacity>
-    </TouchableOpacity>
+    );
+  };
+
+  const renderEmptyState = () => (
+    <View style={styles.emptyState}>
+      <Icon name="call" size={80} color="#E0E0E0" />
+      <Text style={styles.emptyStateTitle}>
+        {activeFilter === 'missed'
+          ? 'Không có cuộc gọi nhỡ nào'
+          : 'Chưa có cuộc gọi nào'}
+      </Text>
+      <Text style={styles.emptyStateSubtitle}>
+        {activeFilter === 'missed'
+          ? 'Tất cả cuộc gọi đều đã được trả lời'
+          : 'Lịch sử cuộc gọi sẽ hiển thị ở đây'}
+      </Text>
+    </View>
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity>
-          <Icon name="close" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Calls</Text>
-        <View style={styles.headerRight} />
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>Lịch sử cuộc gọi</Text>
+          <Text style={styles.headerSubtitle}>
+            {calls.length} cuộc gọi
+            {missedCallsCount > 0 && ` • ${missedCallsCount} gọi nhỡ`}
+          </Text>
+        </View>
       </View>
 
-      {/* Bộ lọc All / Missed */}
+      {/* Filter Tabs */}
       <View style={styles.filterContainer}>
         <TouchableOpacity
           style={[
             styles.filterButton,
-            activeFilter === "all" && styles.activeFilter,
+            activeFilter === 'all' && styles.activeFilter,
           ]}
-          onPress={() => setActiveFilter("all")}
+          onPress={() => setActiveFilter('all')}
+          activeOpacity={0.7}
         >
           <Text
             style={[
               styles.filterText,
-              activeFilter === "all" && styles.activeFilterText,
+              activeFilter === 'all' && styles.activeFilterText,
             ]}
           >
-            All
+            Tất cả ({calls.length})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
             styles.filterButton,
-            activeFilter === "missed" && styles.activeFilter,
+            activeFilter === 'missed' && styles.activeFilter,
           ]}
-          onPress={() => setActiveFilter("missed")}
+          onPress={() => setActiveFilter('missed')}
+          activeOpacity={0.7}
         >
           <Text
             style={[
               styles.filterText,
-              activeFilter === "missed" && styles.activeFilterText,
+              activeFilter === 'missed' && styles.activeFilterText,
             ]}
           >
-            Missed
+            Gọi nhỡ ({missedCallsCount})
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Ô tìm kiếm */}
+      {/* Search Bar */}
       <View style={styles.searchContainer}>
-        <Icon name="search" size={20} color="#666" />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search Calls..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
+        <View style={styles.searchInputContainer}>
+          <Icon name="search" size={20} color="#999" />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm kiếm theo tên hoặc số điện thoại"
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            returnKeyType="search"
+          />
+          {searchQuery !== '' && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              style={styles.clearButton}
+            >
+              <Icon name="close" size={20} color="#999" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      {/* Danh sách cuộc gọi */}
+      {/* Calls List */}
       <FlatList
         data={filteredData}
         renderItem={renderCallItem}
-        keyExtractor={(item) => item.id}
-        style={styles.callsList}
+        keyExtractor={item => item.id}
+        contentContainerStyle={
+          filteredData.length === 0
+            ? styles.emptyContainer
+            : styles.listContainer
+        }
+        ListEmptyComponent={renderEmptyState}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isLoading}
+            onRefresh={loadCallHistory}
+            colors={['#4CAF50']} // Android
+            tintColor="#4CAF50" // iOS
+            title="Kéo để làm mới..."
+            titleColor="#666"
+          />
+        }
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f5f5f5" },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+  container: {
+    flex: 1,
+    backgroundColor: '#F8F9FA',
   },
-  headerTitle: { fontSize: 18, fontWeight: "600", color: "#333" },
-  headerRight: { width: 24 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+  headerContent: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 2,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
   filterContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: "#fff",
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F0F0F0',
   },
   filterButton: {
     paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 20,
     marginRight: 12,
-    backgroundColor: "#f0f0f0",
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
   },
-  menuOptionText: {
+  activeFilter: {
+    backgroundColor: '#4CAF50',
+    borderColor: '#4CAF50',
+  },
+  filterText: {
     fontSize: 14,
-    padding: 8,
-    color: "#333",
+    fontWeight: '600',
+    color: '#666',
   },
-
-  activeFilter: { backgroundColor: "#2196F3" },
-  filterText: { fontSize: 14, color: "#666" },
-  activeFilterText: { color: "#fff" },
+  activeFilterText: {
+    color: '#FFFFFF',
+  },
   searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#fff",
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    borderBottomColor: '#F0F0F0',
   },
-  searchInput: { flex: 1, marginLeft: 8, fontSize: 16, color: "#333" },
-  callsList: { flex: 1 },
-  callItem: {
-    flexDirection: "row",
-    alignItems: "center",
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    borderWidth: 1,
+    borderColor: '#E8E8E8',
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '400',
+  },
+  clearButton: {
+    padding: 4,
+  },
+  listContainer: {
+    padding: 20,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  callItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   avatarContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  avatarText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  callInfo: {
+    flex: 1,
+  },
+  callName: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1A1A1A',
+    marginBottom: 4,
+  },
+  callDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  callType: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 6,
+  },
+  callTime: {
+    fontSize: 14,
+    color: '#999',
+    marginLeft: 6,
+    fontWeight: '400',
+  },
+  callButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#4CAF50",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
+    backgroundColor: '#F0F8F0',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  avatarText: { fontSize: 16, fontWeight: "600", color: "#fff" },
-  callInfo: { flex: 1 },
-  callName: {
+  separator: {
+    height: 1,
+    backgroundColor: '#F0F0F0',
+    marginHorizontal: 20,
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyStateTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#666',
+    marginTop: 20,
+    marginBottom: 8,
+  },
+  emptyStateSubtitle: {
     fontSize: 16,
-    fontWeight: "500",
-    color: "#333",
-    marginBottom: 2,
+    color: '#999',
+    textAlign: 'center',
+    lineHeight: 22,
   },
-  callDetails: { flexDirection: "row", alignItems: "center" },
-  callTime: { fontSize: 12, color: "#666", marginLeft: 4 },
-  moreButton: { padding: 8 },
 });
 
 export default CallsScreen;
