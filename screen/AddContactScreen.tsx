@@ -41,16 +41,17 @@ const AddContactScreen = () => {
     }
   }, [route.params?.phone]);
 
-  const validatePhone = phoneNumber => {
+  const validatePhone = (phoneNumber: string): boolean => {
     const phoneRegex = /^[0-9+\-\s\(\)]+$/;
     return phoneRegex.test(phoneNumber) && phoneNumber.length >= 10;
   };
 
-  const validateEmail = email => {
+  const validateEmail = (email: string): boolean => {
     if (!email) return true; // Email không bắt buộc
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
   };
+
 
   const handleAdd = async () => {
     // Validation
