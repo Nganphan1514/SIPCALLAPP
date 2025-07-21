@@ -56,27 +56,27 @@ const ClientsScreen = () => {
     loadContacts();
   }, []);
 
-  const handleDelete = (id: string, name: string) => {
-    console.log('Pressed delete', id, name); // <--- Dòng này
-    Alert.alert('Xóa liên hệ', `Bạn có chắc muốn xóa "${name}" khỏi danh bạ?`, [
-      {
-        text: 'Hủy',
-        style: 'cancel',
-      },
-      {
-        text: 'Xóa',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteContact(id);
-            loadContacts();
-          } catch (error) {
-            Alert.alert('Lỗi', 'Không thể xóa liên hệ');
-          }
-        },
-      },
-    ]);
-  };
+  // const handleDelete = (id: string, name: string) => {
+  //   console.log('Pressed delete', id, name); // <--- Dòng này
+  //   Alert.alert('Xóa liên hệ', `Bạn có chắc muốn xóa "${name}" khỏi danh bạ?`, [
+  //     {
+  //       text: 'Hủy',
+  //       style: 'cancel',
+  //     },
+  //     {
+  //       text: 'Xóa',
+  //       style: 'destructive',
+  //       onPress: async () => {
+  //         try {
+  //           await deleteContact(id);
+  //           loadContacts();
+  //         } catch (error) {
+  //           Alert.alert('Lỗi', 'Không thể xóa liên hệ');
+  //         }
+  //       },
+  //     },
+  //   ]);
+  // };
 
   const getAvatarColor = (name: string) => {
     const colors = [
@@ -98,6 +98,7 @@ const ClientsScreen = () => {
       activeOpacity={0.7}
       onPress={() => {
         // Có thể thêm navigation để xem chi tiết contact
+        navigation.navigate('ContactDetail', { contact: item });
       }}
     >
       <View
@@ -112,13 +113,13 @@ const ClientsScreen = () => {
         <Text style={styles.clientName}>{item.name}</Text>
         <Text style={styles.clientNumber}>{item.phone}</Text>
       </View>
-      <TouchableOpacity
+      {/* <TouchableOpacity
         style={styles.deleteButton}
         onPress={() => handleDelete(item.id, item.name)}
         activeOpacity={0.7}
       >
         <Icon name="delete-outline" size={22} color="#FF6B6B" />
-      </TouchableOpacity>
+      </TouchableOpacity> */}
     </TouchableOpacity>
   );
 
@@ -150,7 +151,7 @@ const ClientsScreen = () => {
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Danh bạ</Text>
-          <Text style={styles.headerSubtitle}>{contacts.length} liên hệ</Text>
+          <Text style={styles.headerSubtitle}>{contacts.length} Liên hệ</Text>
         </View>
         <View style={styles.headerActions}>
           <TouchableOpacity

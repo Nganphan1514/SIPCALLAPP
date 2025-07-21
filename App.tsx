@@ -15,6 +15,10 @@ import VoicemailScreen from './screen/VoicemailScreen';
 import IncomingCallScreen from './screen/InComingCallScreen'; // Giao diện khi đang gọi
 import OutgoingCallScreen from './screen/OutGoingCallScreen';
 import AddContactScreen from './screen/AddContactScreen';
+import ContactDetailScreen from "./screen/ContactDetailScreen";
+import EditContactScreen from "./screen/EditContactScreen";
+
+
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -75,6 +79,8 @@ export default function App() {
             <Stack.Screen name="Call" component={OutgoingCallScreen} />
             <Stack.Screen name="AddContact" component={AddContactScreen} />
             <Stack.Screen name="IncomingCall" component={IncomingCallScreen} />
+            <Stack.Screen name="ContactDetail" component={ContactDetailScreen} />
+            <Stack.Screen name="EditContact" component={EditContactScreen} />
           </Stack.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>

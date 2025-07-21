@@ -1,18 +1,22 @@
+// D: \SipCallApp\android\src\services\FireStoreService.ts
 import {
-  collection,
-  addDoc,
-  getDocs,
-  deleteDoc,
-  doc,
-  updateDoc,
-  query,
-  orderBy,
-  ref,
-  uploadBytes,
-  getDownloadURL,
+    collection,
+    addDoc,
+    getDocs,
+    deleteDoc,
+    doc,
+    updateDoc,
+    query,
+    orderBy,
+    serverTimestamp,
+    Timestamp,
+    where as firebaseWhere,
+    WhereFilterOp,
 } from 'firebase/firestore';
-import { storage } from './firebase';
+
 import { db } from "../firebase/firebaseConfig";
+
+
 
 // Kiểu Contact
 export type Contact = {
@@ -21,42 +25,36 @@ export type Contact = {
     phone: string;
     email?: string;
     company?: string;
-    createdAt?: Date;
+    
 };
 
 // Kiểu CallHistory
 export type CallHistory = {
     id: string;
     phone: string;
-    name? : string;
+    name?: string;
     type: "incoming" | "outgoing" | "missed";
     calledAt: Date;
 };
 
 // Thêm contact mới
-export const addContact = async (name: string, phone: string, email? : string, company? : string): Promise<void> => {
+export const addContact = async (
+    name: string,
+    phone: string,
+    email?: string,
+    company?: string
+): Promise<void> => {
     try {
         await addDoc(collection(db, "contacts"), {
             name,
             phone,
             email,
             company,
-            createdAt: new Date(),
+            
         });
     } catch (error) {
         console.error("Error adding contact:", error);
     }
-};
-
-export const uploadImage = async (file: File): Promise<string> => {
-  try {
-    const imageRef = ref(storage, `images/${Date.now()}_${file.name}`);
-    const snapshot = await uploadBytes(imageRef, file);
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    return downloadURL;
-  } catch (error) {
-    throw new Error(`Upload failed: ${(error as Error).message}`);
-  }
 };
 
 // Lấy toàn bộ danh bạ
@@ -68,7 +66,8 @@ export const getContacts = async (): Promise<Contact[]> => {
             id: doc.id,
             name: data.name || "Không tên",
             phone: data.phone || "",
-            createdAt: data.createdAt?.toDate?.() || new Date(),
+            email: data.email || "",
+            company: data.company || "",
         };
     });
 };
@@ -78,44 +77,42 @@ export const deleteContact = async (id: string): Promise<void> => {
     await deleteDoc(doc(db, "contacts", id));
 };
 
-import { where as firebaseWhere, WhereFilterOp } from "firebase/firestore";
-
+// Tìm contact theo số điện thoại
 export const getContactByPhoneNumber = async (
-  phone: string,
+    phone: string
 ): Promise<Contact | null> => {
-  const q = query(collection(db, 'contacts'), where('phone', '==', phone));
+    const q = query(collection(db, "contacts"), where("phone", "==", phone));
+    const querySnapshot = await getDocs(q);
 
-  const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+        const docSnap = querySnapshot.docs[0];
+        const data = docSnap.data();
 
-  if (!querySnapshot.empty) {
-    const docSnap = querySnapshot.docs[0];
-    const data = docSnap.data();
-
-    return {
-      id: docSnap.id,
-      name: data.name || 'Không tên',
-      phone: data.phone || '',
-      createdAt: data.createdAt?.toDate?.() || new Date(),
-    };
-  } else {
-    console.log('Không tìm thấy contact với số điện thoại:', phone);
-    return null;
-  }
+        return {
+            id: docSnap.id,
+            name: data.name || "Không tên",
+            phone: data.phone || "",
+            email: data.email || "",
+            company: data.company || "",
+        };
+    } else {
+        console.log("Không tìm thấy contact với số điện thoại:", phone);
+        return null;
+    }
 };
 
 // Cập nhật contact theo ID
 export const updateContact = async (
     id: string,
-    name: string,
-    phone: string
+    updates: Partial<Omit<Contact, "id">>
 ): Promise<void> => {
-    await updateDoc(doc(db, "contacts", id), { name, phone });
+    await updateDoc(doc(db, "contacts", id), updates);
 };
 
 // Lưu lịch sử cuộc gọi
 export const saveCallHistory = async (
     phone: string,
-    name : string,
+    name: string,
     type: "incoming" | "outgoing" | "missed"
 ): Promise<void> => {
     try {
@@ -134,8 +131,7 @@ export const saveCallHistory = async (
 export const getCallHistory = async (): Promise<CallHistory[]> => {
     const callHistoryQuery = query(
         collection(db, "callHistory"),
-        orderBy("calledAt", "desc") // Sắp xếp theo thời gian giảm dần
-        // limit(50) // Nếu muốn giới hạn 50 dòng đầu tiên
+        orderBy("calledAt", "desc")
     );
 
     const snapshot = await getDocs(callHistoryQuery);
@@ -144,12 +140,13 @@ export const getCallHistory = async (): Promise<CallHistory[]> => {
         return {
             id: doc.id,
             phone: data.phone || "",
-            name : data.name || "",
+            name: data.name || "",
             type: data.type || "incoming",
             calledAt: data.calledAt?.toDate?.() || new Date(),
         };
     });
 };
+
 // Xoá 1 cuộc gọi theo ID
 export const deleteCallHistory = async (id: string): Promise<void> => {
     try {
@@ -159,6 +156,7 @@ export const deleteCallHistory = async (id: string): Promise<void> => {
         console.error("Error deleting call history:", error);
     }
 };
+
 function where(fieldPath: string, opStr: WhereFilterOp, value: any) {
     return firebaseWhere(fieldPath, opStr, value);
 }
